@@ -17,6 +17,12 @@ const (
 )
 
 type RefreshToken string
+/*
+func (t RefreshToken) MarshalJSON() ([]byte, error) {
+	//return []byte(fmt.Sprintf(`"refreshToken": "%s"`, t)), nil
+	//return []byte(fmt.Sprintf(`{"refreshToken": "%s"}`, t)), nil
+	return []byte(t), nil
+}*/
 
 type RefreshTokenRequest struct {
 	baseURL  string
@@ -86,11 +92,11 @@ type AccessTokenRequest struct {
 	RefreshToken RefreshToken `json:"refreshToken"`
 }
 
-func NewAccessTokenRequest(baseURL, uid string, refreshToken *RefreshToken) *AccessTokenRequest {
+func NewAccessTokenRequest(baseURL, uid string, refreshToken RefreshToken) *AccessTokenRequest {
 	return &AccessTokenRequest{
 		baseURL:      baseURL,
 		Uid:          uid,
-		RefreshToken: RefreshTokenKey,
+		RefreshToken: refreshToken,
 	}
 }
 
@@ -104,6 +110,14 @@ func GetAccessToken(template *AccessTokenRequest) (AccessToken, error) {
 	if err != nil {
 		return "", fmt.Errorf("unable to make http request with given request template : %v", err)
 	}
+	/*
+	var data1 interface{}
+	err = json.Unmarshal(marshalled, &data1)
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Println(data1)
+	}*/
 
 	// TODO : required http header must be added here.
 	req.Header.Set("Content-Type", "application/json")
@@ -113,6 +127,7 @@ func GetAccessToken(template *AccessTokenRequest) (AccessToken, error) {
 	}
 
 	if resp.StatusCode != http.StatusCreated {
+		fmt.Println(resp)
 		return "", errors.New("failed on create access token")
 	}
 

@@ -32,12 +32,13 @@ func TestGetRefreshToken(t *testing.T) {
 }
 
 func TestGetAccessToken(t *testing.T) {
+	t.Log(refreshToken)
 	var err error
-	template := clientgo.NewAccessTokenRequest(authArgs["base_url"], authArgs["user_name"], &refreshToken)
+	template := clientgo.NewAccessTokenRequest(authArgs["base_url"], authArgs["user_name"], refreshToken)
 	accessToken, err = clientgo.GetAccessToken(template)
 	if err != nil {
 		t.Log(err)
 	} else {
-		t.Log(accessToken)
+		t.Logf("AccessKey : %s", accessToken)
 	}
 }
