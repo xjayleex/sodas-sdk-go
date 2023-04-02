@@ -11,37 +11,46 @@ import (
 
 const (
 	ListCredentialEndpoint = "/api/v1/data-lake/object-storage/credential/list"
-	// TODO : Where to get base url??
-	HardCodedBaseUrl = "api.221.154.134.31.traefik.me:10011"
 )
 
-// minio keycloack credential이 계속해서 expire 된다면, 로직을 Token 받아오는 로직처럼 바꾸어야함..
+// minio keyclock credential이 계속해서 expire 된다면, 로직을 Token 받아오는 로직처럼 바꾸어야함..
 type Credential struct {
 	AccessKeyId     string
 	SecretAccessKey string
 }
 
 type CredsListOpts struct {
-	Offset int `json:"offset"`
-	Limit  int `json:"limit"`
+	Offset  int    `json:"offset"`
+	Limit   int    `json:"limit"`
+	BaseUrl string `json:"-"`
 }
 
-func GetCreds(tokenman TokenManager) ([]*Credential, error) {
-	access, err := tokenman.AccessToken()
+func (o *CredsListOpts) validate() error {
+	if o.BaseUrl == "" {
+		return errors.New("`CredsListOpts.BaseUrl` is prerequisite field")
+	}
+	if o.Offset < 0 {
+		return errors.New("`Offset` must not be lower than zero")
+	}
+	if o.Limit == 0 {
+		o.Limit = 1
+	}
+	return nil
+}
+
+func GetCreds(tokenman TokenManager, listOpts CredsListOpts) ([]*Credential, error) {
+	if err := listOpts.validate(); err != nil {
+		return nil, err
+	}
+	access, err := tokenman.Token()
 	if err != nil {
 		return nil, err
 	}
-	endpoint := fmt.Sprintf("%s%s%s", HttpScheme, HardCodedBaseUrl, ListCredentialEndpoint)
-	return requestCredentials(endpoint, *access, nil)
+	endpoint := fmt.Sprintf("%s%s%s", HttpScheme, listOpts.BaseUrl, ListCredentialEndpoint)
+	return requestCredentials(endpoint, *access, listOpts)
 }
 
-func requestCredentials(endpoint, accessToken string, listOpts *CredsListOpts) ([]*Credential, error) {
-	if listOpts == nil {
-		listOpts = &CredsListOpts{
-			Offset: 0,
-			Limit:  1,
-		}
-	}
+func requestCredentials(endpoint, accessToken string, listOpts CredsListOpts) ([]*Credential, error) {
 	reqParam := listOpts
 	marshalled, err := json.Marshal(reqParam)
 	if err != nil {

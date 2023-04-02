@@ -24,163 +24,158 @@ const (
 	AccessTokenKey          = "accessToken"
 )
 
-type tokenOpts struct {
-	refreshEndpoint string
-	accessEndpoint  string
+type AccessTokenOpts struct {
+	// refreshEndpoint string
+	url string
 
-	baseUrl  string
-	uid      string
-	password string
-	offline  string
+	BaseUrl string
+	Uid     string
+	Refresh string
 }
 
-func NewTokenOpts(baseUrl, id, password, offline string) *tokenOpts {
-	opts := &tokenOpts{
-		baseUrl:  baseUrl,
-		uid:      id,
-		password: password,
-		offline:  offline,
+func (o *AccessTokenOpts) validate() bool { return true }
+
+func (o *AccessTokenOpts) apiUrl() string {
+	if o.url == "" {
+		o.url = fmt.Sprintf("%s%s%s", HttpScheme, o.BaseUrl, AuthAccessTokenEndpoint)
+		return o.url
 	}
-	opts.refreshEndpoint = fmt.Sprintf("%s%s%s", HttpScheme, baseUrl, AuthLoginEndpoint)
-	opts.accessEndpoint = fmt.Sprintf("%s%s%s", HttpScheme, baseUrl, AuthAccessTokenEndpoint)
-	return opts
+	return o.url
 }
 
 type TokenManager interface {
-	AccessToken() (*string, error)
-	Refresh() error
+	Token() (*string, error)
 	UserId() string
 }
 
 // tokenManager must be initialized with NewTokenManager function.
 type tokenManager struct {
 	//	sync.Mutex
-	httpC *http.Client
-	a     *string // representing access token
-	r     *string // representing refresh token
-	opts  *tokenOpts
+	httpC http.Client
+	a     string // representing access token
+	r     string // representing refresh token
+	opts  AccessTokenOpts
 }
 
-func NewTokenManager(opts *tokenOpts) *tokenManager {
+func NewTokenManager(opts AccessTokenOpts) *tokenManager {
 	return &tokenManager{
-		httpC: &http.Client{},
+		httpC: http.Client{},
 		opts:  opts,
+		a:     "",
+		r:     opts.Refresh,
 	}
 }
 
 func (t *tokenManager) UserId() string {
-	return t.opts.uid
+	return t.opts.Uid
 }
 
-func (t *tokenManager) AccessToken() (*string, error) {
-	if t.a == nil && t.r == nil {
-		if err := t.refresh(); err != nil {
-			return nil, err
-		} else {
-			return t.a, nil
+func (t *tokenManager) AccessToken() (string, error) {
+	if t.a == "" {
+		// try get access token with refresh token =-> AuthAccessTokenEndpoint
+		resp, err := t.requestAccessToken()
+		if err != nil /* && errors.Is(err, ErrUnauthorized) */ {
+			// we can try to get new refresh token only if we have user password.
+			return "", err
 		}
-	} else if t.a == nil && t.r != nil {
-		err := t.Refresh()
-		return t.a, err
-	} else {
-		return t.a, nil
+		t.a, t.r = resp.access, resp.refresh
 	}
-}
-
-func (t *tokenManager) Refresh() error {
-	if t.r != nil {
-		na, err := t.getAccessToken()
-		if err != nil {
-			if errors.Is(err, ErrUnauthorized) {
-				return t.refresh()
-			} else {
-				return errors.New("unknown error")
-			}
-		}
-		t.a = &na
-	}
-	return t.refresh()
+	return t.a, nil
 }
 
 // let it can occur 401 error, ...
-func (t *tokenManager) getAccessToken() (string, error) {
+func (t *tokenManager) requestAccessToken() (*tokenResponse, error) {
 	reqBody := struct {
 		Uid          string `json:"id"`
 		RefreshToken string `json:"refreshToken"`
 	}{
-		Uid:          t.opts.uid,
-		RefreshToken: *t.r,
+		Uid:          t.opts.Uid,
+		RefreshToken: t.r,
 	}
 
-	endpoint := t.opts.accessEndpoint
+	endpoint := t.opts.apiUrl()
 	marshalled, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", errors.New("unable to marshal request body")
+		return nil, errors.New("unable to marshal request body")
 	}
 	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(marshalled))
 	if err != nil {
-		return "", fmt.Errorf("unable to make http request with given request template : %v", err)
+		return nil, fmt.Errorf("unable to make http request with given request template : %v", err)
 	}
 	// TODO : required http header must be added here.
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := t.httpC.Do(req)
+	httpresp, err := t.httpC.Do(req)
 	if err != nil {
-		return "", errors.New("unable to get access token")
+		return nil, errors.New("unable to get access token")
 	}
 
-	if resp.StatusCode != http.StatusCreated {
-		if resp.StatusCode == http.StatusUnauthorized {
-			return "", ErrUnauthorized
+	if httpresp.StatusCode != http.StatusCreated {
+		if httpresp.StatusCode == http.StatusUnauthorized {
+			return nil, ErrUnauthorized
 		}
-		return "", fmt.Errorf("failed on create access token with status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed on create access token with status code: %d", httpresp.StatusCode)
 	}
 
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	defer httpresp.Body.Close()
+	body, err := io.ReadAll(httpresp.Body)
 
 	if err != nil {
-		return "", fmt.Errorf("unable to read response body : %v", err)
+		return nil, fmt.Errorf("unable to read response body : %v", err)
 	}
 
 	var data map[string]interface{}
 
 	if err = json.Unmarshal(body, &data); err != nil {
-		return "", errors.New("unable to unmarshal response body")
+		return nil, errors.New("unable to unmarshal response body")
 	}
-
+	resp := &tokenResponse{}
 	if access, ok := data[AccessTokenKey]; ok {
 		if refresh, ok := data[RefreshTokenKey]; ok {
-			nr, na := fmt.Sprint(refresh), fmt.Sprint(access)
-			t.r, t.a = &nr, &na
+			resp.access, resp.refresh = fmt.Sprint(access), fmt.Sprint(refresh)
+		} else {
+			resp.access, resp.refresh = fmt.Sprint(access), t.r
 		}
 	} else {
-		return "", errors.New("either the key for a refresh or access token does not exist in response body")
+		return nil, errors.New("either the key for a refresh or access token does not exist in response body")
 	}
-	return *t.a, nil
+	return resp, nil
 }
 
-func (t *tokenManager) refresh() error {
-	resp, err := t.requestRefresh()
-	if err != nil {
-		return err
-	}
-	t.a, t.r = &resp.access, &resp.refresh
-	return nil
+type tokenResponse struct {
+	access  string
+	refresh string
 }
 
-func (t *tokenManager) requestRefresh() (*tokenResponse, error) {
+type RefreshTokenOpts struct {
+	url string
+
+	BaseUrl  string
+	Uid      string
+	Password string
+	Offline  string
+}
+
+func (o *RefreshTokenOpts) apiUrl() string {
+	if o.url == "" {
+		o.url = fmt.Sprintf("%s%s%s", HttpScheme, o.BaseUrl, AuthLoginEndpoint)
+		return o.url
+	}
+	return o.url
+}
+
+func RefreshToken(opts RefreshTokenOpts) (*tokenResponse, error) {
+	httpC := http.Client{}
 	reqBody := struct {
 		Uid      string `json:"id"`
 		Password string `json:"password"`
 		Offline  string `json:"offline"`
 	}{
-		Uid:      t.opts.uid,
-		Password: t.opts.password,
-		Offline:  t.opts.offline,
+		Uid:      opts.Uid,
+		Password: opts.Password,
+		Offline:  opts.Offline,
 	}
-	// TODO : implement above bodyData
 
-	endpoint := t.opts.refreshEndpoint
+	endpoint := opts.apiUrl()
 	marshalled, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, errors.New("unable to marshal request body")
@@ -193,7 +188,7 @@ func (t *tokenManager) requestRefresh() (*tokenResponse, error) {
 	// TODO : required http header must be added here.
 	req.Header.Set("Content-Type", "application/json")
 
-	httpresp, err := t.httpC.Do(req)
+	httpresp, err := httpC.Do(req)
 	if err != nil {
 		return nil, errors.New("unable to get refresh token")
 	}
@@ -215,26 +210,16 @@ func (t *tokenManager) requestRefresh() (*tokenResponse, error) {
 		return nil, errors.New("unable to unmarshal response body")
 	}
 
-	var resp tokenResponse
-	if refresh, ok := data[RefreshTokenKey]; ok {
-		if access, ok := data[AccessTokenKey]; ok {
-			resp.refresh, resp.access = fmt.Sprint(refresh), fmt.Sprint(access)
-			t.r, t.a = &resp.refresh, &resp.access
-		}
+	resp := &tokenResponse{}
+	if refresh, ok := data[RefreshTokenKey]; !ok {
+		return nil, errors.New("either the key for a refresh token does not exist in response body")
 	} else {
-		return nil, errors.New("either the key for a refresh or access token does not exist in response body")
+		resp.refresh = fmt.Sprint(refresh)
 	}
-	return &resp, nil
-}
 
-type tokenResponse struct {
-	access  string
-	refresh string
-}
+	if access, ok := data[AccessTokenKey]; ok {
+		resp.access = fmt.Sprint(access)
+	}
 
-/*
-func (t RefreshToken) MarshalJSON() ([]byte, error) {
-	//return []byte(fmt.Sprintf(`"refreshToken": "%s"`, t)), nil
-	//return []byte(fmt.Sprintf(`{"refreshToken": "%s"}`, t)), nil
-	return []byte(t), nil
-}*/
+	return resp, nil
+}
