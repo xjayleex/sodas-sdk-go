@@ -146,6 +146,14 @@ type tokenResponse struct {
 	refresh string
 }
 
+func (t *tokenResponse) Access() string {
+	return t.access
+}
+
+func (t *tokenResponse) Refresh() string {
+	return t.refresh
+}
+
 type RefreshTokenOpts struct {
 	url string
 
