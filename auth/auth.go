@@ -33,8 +33,6 @@ type AccessTokenOpts struct {
 	Refresh string
 }
 
-func (o *AccessTokenOpts) validate() bool { return true }
-
 func (o *AccessTokenOpts) apiUrl() string {
 	if o.url == "" {
 		o.url = fmt.Sprintf("%s%s%s", HttpScheme, o.BaseUrl, AuthAccessTokenEndpoint)
@@ -44,7 +42,7 @@ func (o *AccessTokenOpts) apiUrl() string {
 }
 
 type TokenManager interface {
-	Token() (*string, error)
+	Token() (string, error)
 	UserId() string
 }
 
@@ -70,7 +68,7 @@ func (t *tokenManager) UserId() string {
 	return t.opts.Uid
 }
 
-func (t *tokenManager) AccessToken() (string, error) {
+func (t *tokenManager) Token() (string, error) {
 	if t.a == "" {
 		// try get access token with refresh token =-> AuthAccessTokenEndpoint
 		resp, err := t.requestAccessToken()

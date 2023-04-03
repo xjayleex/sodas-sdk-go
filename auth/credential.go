@@ -47,7 +47,7 @@ func GetCreds(tokenman TokenManager, listOpts CredsListOpts) ([]*Credential, err
 		return nil, err
 	}
 	endpoint := fmt.Sprintf("%s%s%s", HttpScheme, listOpts.BaseUrl, ListCredentialEndpoint)
-	return requestCredentials(endpoint, *access, listOpts)
+	return requestCredentials(endpoint, access, listOpts)
 }
 
 func requestCredentials(endpoint, accessToken string, listOpts CredsListOpts) ([]*Credential, error) {
