@@ -12,6 +12,8 @@ import (
 	"github.com/xjayleex/sodas-sdk-go/tools"
 )
 
+// Retrieve retrieves all properties in AppProperty fields from
+// runtime environemt variables.
 // Usage :
 // prop := property.HelloSodasProperties{}
 // property.Retrieve(&prop)
@@ -24,7 +26,6 @@ func Retrieve(prop property.AppProperties) error {
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
 		kind := field.Kind()
-		fmt.Println(field.Type().Name(), kind.String())
 		tagValue, ok := v.Type().Field(i).Tag.Lookup(prop.RootFieldTag())
 		if !ok {
 			return fmt.Errorf("AppProperties tag lookup error : field %s does not have tag %s", field.Type().Name(), prop.RootFieldTag())
