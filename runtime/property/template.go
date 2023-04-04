@@ -2,6 +2,7 @@ package property
 
 // Do not use this property struct directly. This is an example code for
 // representing how to implement `AppProperties` interface.
+// Note that all of the field tags of Input struct type has `json` tag.
 type HelloAppProperties struct {
 	Input Input `sodas_prop:"input"`
 	Head  int   `sodas_prop:"head"`
