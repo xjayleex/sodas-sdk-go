@@ -12,7 +12,7 @@ import (
 	"github.com/xjayleex/sodas-sdk-go/tools"
 )
 
-// Retrieve retrieves all properties in AppProperty fields from
+// Retrieve retreives all properties in AppProperty fields from
 // runtime environemt variables.
 // Usage :
 // prop := property.HelloSodasProperties{}
@@ -21,7 +21,7 @@ import (
 func Retrieve(prop property.AppProperties) error {
 	v := reflect.ValueOf(prop).Elem()
 	if v.Kind() != reflect.Struct {
-		return errors.New("prop interface must be struct")
+		return errors.New("prop interface must be a struct")
 	}
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
