@@ -9,6 +9,7 @@ import (
 type DatalakeInterface interface {
 	RESTClient() rest.Interface
 	ObjectStorage() ObjectStorageInterface
+	Postgresql() PostgresqlInterface
 }
 
 func NewDatalakeClient(c *rest.Config, hc *http.Client) (*DatalakeClient, error) {
@@ -31,6 +32,10 @@ type DatalakeClient struct {
 
 func (c *DatalakeClient) ObjectStorage() ObjectStorageInterface {
 	return newObjectStorage(c, c.path)
+}
+
+func (c *DatalakeClient) Postgresql() PostgresqlInterface {
+	return newPostgresql(c, c.path)
 }
 
 func (c *DatalakeClient) RESTClient() rest.Interface {
